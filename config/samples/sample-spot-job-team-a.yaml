@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: sample-job-
+  namespace: team-a1
+  annotations:
+    kueue.x-k8s.io/queue-name: main
+spec:
+  parallelism: 50
+  completions: 50
+  suspend: true
+  ttlSecondsAfterFinished: 60
+  template:
+    spec:
+      tolerations:
+      - key: spot
+        operator: Exists
+      containers:
+      - name: spot-job
+        image: gcr.io/k8s-staging-perf-tests/sleep:latest
+        args: ["60s"]
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "100Mi"
+          limits:
+            cpu: 1
+            memory: "200Mi"
+      restartPolicy: Never

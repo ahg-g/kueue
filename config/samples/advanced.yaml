@@ -1,0 +1,116 @@
+apiVersion: kueue.x-k8s.io/v1alpha1
+kind: ResourceFlavor
+metadata:
+  name: standard
+labels:
+  instance-type: standard
+---
+apiVersion: kueue.x-k8s.io/v1alpha1
+kind: ResourceFlavor
+metadata:
+  name: spot
+labels:
+  instance-type: spot
+taints:
+- effect: NoSchedule
+  key: spot
+  value: "true"
+---
+apiVersion: kueue.x-k8s.io/v1alpha1
+kind: ClusterQueue
+metadata:
+  name: team-a
+spec:
+  cohort: "team-ab"
+  namespaceSelector:
+    matchExpressions:
+    - key: team
+      operator: In
+      values:
+      - team-a
+  requestableResources:
+  - name: "cpu"
+    flavors:
+    - resourceFlavor: standard
+      quota:
+        guaranteed: 20
+    - resourceFlavor: spot
+      quota:
+        guaranteed: 10
+  - name: "memory"
+    flavors:
+    - resourceFlavor: standard
+      quota:
+        guaranteed: 36Gi
+---
+apiVersion: kueue.x-k8s.io/v1alpha1
+kind: ClusterQueue
+metadata:
+  name: team-b
+spec:
+  cohort: "team-ab"
+  namespaceSelector:
+    matchExpressions:
+    - key: team
+      operator: In
+      values:
+      - team-b
+  requestableResources:
+  - name: "cpu"
+    flavors:
+    - resourceFlavor: standard
+      quota:
+        guaranteed: 10
+    - resourceFlavor: spot
+      quota:
+        guaranteed: 10
+  - name: "memory"
+    flavors:
+    - resourceFlavor: standard
+      quota:
+        guaranteed: 36Gi        
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-a1
+  labels:
+    team: team-a
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-a2
+  labels:
+    team: team-a
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-b1
+  labels:
+    team: team-b
+---
+apiVersion: kueue.x-k8s.io/v1alpha1
+kind: Queue
+metadata:
+  name: main
+  namespace: team-a1
+spec:
+  clusterQueue: team-a
+---
+apiVersion: kueue.x-k8s.io/v1alpha1
+kind: Queue
+metadata:
+  name: main
+  namespace: team-a2
+spec:
+  clusterQueue: team-a
+---
+apiVersion: kueue.x-k8s.io/v1alpha1
+kind: Queue
+metadata:
+  name: main
+  namespace: team-b1
+spec:
+  clusterQueue: team-b
