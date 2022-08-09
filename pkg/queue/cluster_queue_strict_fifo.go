@@ -25,7 +25,7 @@ import (
 // ClusterQueueStrictFIFO is the implementation for the ClusterQueue for
 // StrictFIFO.
 type ClusterQueueStrictFIFO struct {
-	ClusterQueueImpl
+	*ClusterQueueImpl
 }
 
 var _ ClusterQueue = &ClusterQueueStrictFIFO{}
@@ -34,8 +34,12 @@ const StrictFIFO = kueue.StrictFIFO
 
 func newClusterQueueStrictFIFO(cq *kueue.ClusterQueue) (ClusterQueue, error) {
 	cqImpl := newClusterQueueImpl(keyFunc, byCreationTime)
-	cqImpl.Update(cq)
-	return cqImpl, nil
+	cqStrict := &ClusterQueueStrictFIFO{
+		ClusterQueueImpl: cqImpl,
+	}
+
+	err := cqStrict.Update(cq)
+	return cqStrict, err
 }
 
 // byCreationTime is the function used by the clusterQueue heap algorithm to sort
@@ -51,4 +55,8 @@ func byCreationTime(a, b interface{}) bool {
 		return p1 > p2
 	}
 	return objA.Obj.CreationTimestamp.Before(&objB.Obj.CreationTimestamp)
+}
+
+func (cq *ClusterQueueStrictFIFO) RequeueIfNotPresent(wInfo *workload.Info, reason RequeueReason) bool {
+	return cq.ClusterQueueImpl.RequeueIfNotPresent(wInfo, reason != RequeueReasonNamespaceMismatch)
 }

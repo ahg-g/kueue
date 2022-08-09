@@ -256,9 +256,9 @@ func (h *cqNamespaceHandler) Create(e event.CreateEvent, q workqueue.RateLimitin
 
 func (h *cqNamespaceHandler) Update(e event.UpdateEvent, q workqueue.RateLimitingInterface) {
 	oldNs := e.ObjectOld.(*corev1.Namespace)
-	oldMatchingCqs := h.cache.MatchingClusterQueues(oldNs.Labels)
+	oldMatchingCqs := h.cache.ClusterQueuesMatchingNamespace(oldNs.Labels)
 	newNs := e.ObjectNew.(*corev1.Namespace)
-	newMatchingCqs := h.cache.MatchingClusterQueues(newNs.Labels)
+	newMatchingCqs := h.cache.ClusterQueuesMatchingNamespace(newNs.Labels)
 	cqs := sets.NewString()
 	for cq := range newMatchingCqs {
 		if !oldMatchingCqs.Has(cq) {

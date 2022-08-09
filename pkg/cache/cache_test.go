@@ -1545,7 +1545,7 @@ func TestUpdateWithFlavors(t *testing.T) {
 	}
 }
 
-func TestMatchingClusterQueues(t *testing.T) {
+func TestClusterQueuesMatchingNamespace(t *testing.T) {
 	clusterQueues := []*kueue.ClusterQueue{
 		utiltesting.MakeClusterQueue("matching1").
 			NamespaceSelector(&metav1.LabelSelector{}).Obj(),
@@ -1576,9 +1576,63 @@ func TestMatchingClusterQueues(t *testing.T) {
 		}
 	}
 
-	gotCQs := cache.MatchingClusterQueues(map[string]string{"dep": "eng"})
+	gotCQs := cache.ClusterQueuesMatchingNamespace(map[string]string{"dep": "eng"})
 	if diff := cmp.Diff(wantCQs, gotCQs); diff != "" {
 		t.Errorf("Wrong ClusterQueues (-want,+got):\n%s", diff)
+	}
+}
+
+func TestClusterQueuesMatchesNamespace(t *testing.T) {
+	testcases := []struct {
+		name         string
+		clusterQueue *kueue.ClusterQueue
+		wantMatch    bool
+	}{
+		{
+			name: "Matches empty selector",
+			clusterQueue: utiltesting.MakeClusterQueue("matching1").
+				NamespaceSelector(&metav1.LabelSelector{}).Obj(),
+			wantMatch: true,
+		},
+		{
+			name: "Not matching nil selector",
+			clusterQueue: utiltesting.MakeClusterQueue("not-matching").
+				NamespaceSelector(nil).Obj(),
+			wantMatch: false,
+		},
+		{
+			name: "Matches set selector",
+			clusterQueue: utiltesting.MakeClusterQueue("matching2").
+				NamespaceSelector(&metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "dep",
+							Operator: metav1.LabelSelectorOpIn,
+							Values:   []string{"eng"},
+						},
+					},
+				}).Obj(),
+			wantMatch: true,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			scheme := runtime.NewScheme()
+			if err := kueue.AddToScheme(scheme); err != nil {
+				t.Fatalf("Failed adding kueue scheme: %v", err)
+			}
+			cache := New(fake.NewClientBuilder().WithScheme(scheme).Build())
+			if err := cache.AddClusterQueue(ctx, tc.clusterQueue); err != nil {
+				t.Errorf("failed to add clusterQueue %s", tc.clusterQueue.Name)
+			}
+
+			gotMatch := cache.ClusterQueueMatchesNamespace(tc.clusterQueue.Name, map[string]string{"dep": "eng"})
+			if diff := cmp.Diff(tc.wantMatch, gotMatch); diff != "" {
+				t.Errorf("Wrong matching (-want,+got):\n%s", diff)
+			}
+		})
 	}
 }
 

@@ -124,7 +124,9 @@ func (m *Manager) UpdateClusterQueue(cq *kueue.ClusterQueue) error {
 
 	oldCohort := cqImpl.Cohort()
 	// TODO(#8): recreate heap based on a change of queueing policy.
-	cqImpl.Update(cq)
+	if err := cqImpl.Update(cq); err != nil {
+		return err
+	}
 	newCohort := cqImpl.Cohort()
 	if oldCohort != newCohort {
 		m.updateCohort(oldCohort, newCohort, cq.Name)
@@ -288,7 +290,7 @@ func (m *Manager) addOrUpdateWorkload(w *kueue.Workload) bool {
 // RequeueWorkload requeues the workload ensuring that the queue and the
 // workload still exist in the client cache and it's not admitted. It won't
 // requeue if the workload is already in the queue (possible if the workload was updated).
-func (m *Manager) RequeueWorkload(ctx context.Context, info *workload.Info, immediate bool) bool {
+func (m *Manager) RequeueWorkload(ctx context.Context, info *workload.Info, reason RequeueReason) bool {
 	m.Lock()
 	defer m.Unlock()
 
@@ -311,7 +313,7 @@ func (m *Manager) RequeueWorkload(ctx context.Context, info *workload.Info, imme
 		return false
 	}
 
-	added := cq.RequeueIfNotPresent(info, immediate)
+	added := cq.RequeueIfNotPresent(info, reason)
 	reportPendingWorkloads(q.ClusterQueue, cq.Pending())
 	if added {
 		m.Broadcast()
@@ -399,13 +401,13 @@ func (m *Manager) QueueInadmissibleWorkloads(cqNames sets.String) {
 func (m *Manager) queueAllInadmissibleWorkloadsInCohort(cq ClusterQueue) bool {
 	cohort := cq.Cohort()
 	if cohort == "" {
-		return cq.QueueInadmissibleWorkloads()
+		return cq.QueueInadmissibleWorkloads(m.client)
 	}
 
 	queued := false
 	for cqName := range m.cohorts[cohort] {
 		if clusterQueue, ok := m.clusterQueues[cqName]; ok {
-			queued = clusterQueue.QueueInadmissibleWorkloads() || queued
+			queued = clusterQueue.QueueInadmissibleWorkloads(m.client) || queued
 		}
 	}
 	return queued
@@ -462,6 +464,26 @@ func (m *Manager) Dump() map[string]sets.String {
 	dump := make(map[string]sets.String, len(m.queues))
 	for key, cq := range m.clusterQueues {
 		if elements, ok := cq.Dump(); ok {
+			dump[key] = elements
+		}
+	}
+	if len(dump) == 0 {
+		return nil
+	}
+	return dump
+}
+
+// DumpInadmissible is a dump of the inadmissible workloads list.
+// Only use for testing purposes.
+func (m *Manager) DumpInadmissible() map[string]sets.String {
+	m.Lock()
+	defer m.Unlock()
+	if len(m.queues) == 0 {
+		return nil
+	}
+	dump := make(map[string]sets.String, len(m.queues))
+	for key, cq := range m.clusterQueues {
+		if elements, ok := cq.DumpInadmissible(); ok {
 			dump[key] = elements
 		}
 	}

@@ -119,6 +119,47 @@ var _ = ginkgo.Describe("Workload controller", func() {
 		})
 	})
 
+	ginkgo.When("the workload does not match clusterqueue namespaceselector", func() {
+		var flavor *kueue.ResourceFlavor
+
+		ginkgo.BeforeEach(func() {
+			flavor = testing.MakeResourceFlavor("flavor").Obj()
+			gomega.Expect(k8sClient.Create(ctx, flavor)).Should(gomega.Succeed())
+			clusterQueue = testing.MakeClusterQueue("cluster-queue").
+				NamespaceSelector(&metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "dep",
+							Operator: metav1.LabelSelectorOpIn,
+							Values:   []string{"eng", "sales"},
+						},
+					},
+				}).
+				Resource(testing.MakeResource(resourceGPU).
+					Flavor(testing.MakeFlavor(flavor.Name, "5").Max("10").Obj()).Obj()).
+				Obj()
+			gomega.Expect(k8sClient.Create(ctx, clusterQueue)).To(gomega.Succeed())
+			queue = testing.MakeQueue("queue", ns.Name).ClusterQueue(clusterQueue.Name).Obj()
+			gomega.Expect(k8sClient.Create(ctx, queue)).To(gomega.Succeed())
+		})
+		ginkgo.AfterEach(func() {
+			gomega.Expect(framework.DeleteNamespace(ctx, k8sClient, ns)).To(gomega.Succeed())
+			gomega.Expect(framework.DeleteResourceFlavor(ctx, k8sClient, flavor)).To(gomega.Succeed())
+			gomega.Expect(framework.DeleteClusterQueue(ctx, k8sClient, clusterQueue)).To(gomega.Succeed())
+		})
+
+		ginkgo.It("Should update status when workloads are created", func() {
+			wl = testing.MakeWorkload("three", ns.Name).Queue(queue.Name).Request(corev1.ResourceCPU, "1").Obj()
+			gomega.Expect(k8sClient.Create(ctx, wl)).To(gomega.Succeed())
+			gomega.Eventually(func() []kueue.WorkloadCondition {
+				gomega.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(wl), &updatedQueueWorkload)).To(gomega.Succeed())
+				return updatedQueueWorkload.Status.Conditions
+			}, framework.Timeout, framework.Interval).ShouldNot(gomega.BeNil())
+			gomega.Expect(updatedQueueWorkload.Status.Conditions[0].Message).
+				To(testing.Equal("Workload namespace doesn't match ClusterQueue selector"))
+		})
+	})
+
 	ginkgo.When("the workload is admitted", func() {
 		var flavor *kueue.ResourceFlavor
 

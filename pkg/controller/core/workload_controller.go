@@ -100,6 +100,20 @@ func (r *WorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	ns := corev1.Namespace{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: wl.Namespace}, &ns)
+	if status == pending && err != nil {
+		err := workload.UpdateStatusIfChanged(ctx, r.client, &wl, kueue.WorkloadAdmitted, corev1.ConditionFalse,
+			"Inadmissible", fmt.Sprintf("Could not obtain workload namespace: %v", err))
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if status == pending && !r.cache.ClusterQueueMatchesNamespace(cqName, ns.Labels) {
+		err := workload.UpdateStatusIfChanged(ctx, r.client, &wl, kueue.WorkloadAdmitted, corev1.ConditionFalse,
+			"Inadmissible", "Workload namespace doesn't match ClusterQueue selector")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
 	if status == admitted {
 		err := workload.UpdateStatusIfChanged(ctx, r.client, &wl, kueue.WorkloadAdmitted, corev1.ConditionTrue, "", "")
 		return ctrl.Result{}, client.IgnoreNotFound(err)

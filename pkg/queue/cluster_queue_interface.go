@@ -21,15 +21,24 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	kueue "sigs.k8s.io/kueue/apis/kueue/v1alpha1"
 	"sigs.k8s.io/kueue/pkg/workload"
+)
+
+type RequeueReason string
+
+const (
+	RequeueReasonFailedAfterNomination RequeueReason = "FailedAfterNomination"
+	RequeueReasonNamespaceMismatch     RequeueReason = "NamespaceMismatch"
+	RequeueReasonGeneric               RequeueReason = ""
 )
 
 // ClusterQueue is an interface for a cluster queue to store workloads waiting
 // to be scheduled.
 type ClusterQueue interface {
 	// Update updates the properties of this ClusterQueue.
-	Update(*kueue.ClusterQueue)
+	Update(*kueue.ClusterQueue) error
 	// Cohort returns the Cohort of this ClusterQueue.
 	Cohort() string
 
@@ -59,11 +68,11 @@ type ClusterQueue interface {
 	// compete with other workloads, until cluster events free up quota.
 	// The workload should not be reinserted if it's already in the ClusterQueue.
 	// Returns true if the workload was inserted.
-	RequeueIfNotPresent(*workload.Info, bool) bool
+	RequeueIfNotPresent(*workload.Info, RequeueReason) bool
 	// QueueInadmissibleWorkloads moves all workloads put in temporary placeholder stage
 	// to the ClusterQueue. If at least one workload is moved,
 	// returns true. Otherwise returns false.
-	QueueInadmissibleWorkloads() bool
+	QueueInadmissibleWorkloads(client client.Client) bool
 
 	// Pending returns the number of pending workloads.
 	Pending() int32
@@ -71,6 +80,7 @@ type ClusterQueue interface {
 	// this ClusterQueue. It returns false if the queue is empty.
 	// Otherwise returns true.
 	Dump() (sets.String, bool)
+	DumpInadmissible() (sets.String, bool)
 	// Info returns workload.Info for the workload key.
 	// Users of this method should not modify the returned object.
 	Info(string) *workload.Info

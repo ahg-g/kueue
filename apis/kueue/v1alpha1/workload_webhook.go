@@ -114,7 +114,7 @@ func ValidateWorkloadUpdate(newObj, oldObj *Workload) field.ErrorList {
 	return allErrs
 }
 
-/// validateQueueNameUpdate validates that queueName is set once
+// / validateQueueNameUpdate validates that queueName is set once
 func validateQueueNameUpdate(new, old string) field.ErrorList {
 	if len(old) == 0 {
 		return field.ErrorList{}
